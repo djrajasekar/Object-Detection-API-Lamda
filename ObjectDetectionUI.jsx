@@ -1,0 +1,235 @@
+import React, { useState } from 'react';
+import './ObjectDetectionUI.css';
+
+const ObjectDetectionUI = () => {
+  const [image, setImage] = useState(null);
+  const [preview, setPreview] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [results, setResults] = useState(null);
+  const [error, setError] = useState(null);
+  const [maxLabels, setMaxLabels] = useState(15);
+  const [confidence, setConfidence] = useState(80);
+
+  // API endpoint - replace with your actual Lambda API Gateway URL
+  const API_ENDPOINT = 'https://t01brchlhi.execute-api.us-east-1.amazonaws.com/dev/detection';
+
+  const handleImageSelect = (event) => {
+    const file = event.target.files[0];
+    if (file) {
+      setImage(file);
+      setError(null);
+      setResults(null);
+
+      // Create preview
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setPreview(reader.result);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+
+    if (!image) {
+      setError('Please select an image');
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    setResults(null);
+
+    try {
+      // Read file as base64
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const base64String = reader.result.split(',')[1];
+        console.log('✅ Base64 string created, length:', base64String.length);
+        console.log('📤 Sending request to:', API_ENDPOINT);
+
+        try {
+          const requestBody = JSON.stringify({
+            body: base64String,
+            maxLabels: parseInt(maxLabels),
+            confidence: parseInt(confidence),
+          });
+          console.log('📦 Request body size:', requestBody.length, 'bytes');
+
+          const response = await fetch(API_ENDPOINT, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: requestBody,
+          });
+
+          console.log('📥 Response status:', response.status, response.statusText);
+
+          if (!response.ok) {
+            const errorText = await response.text();
+            console.error('❌ API Error response:', errorText);
+            throw new Error(`API Error: ${response.statusText}`);
+          }
+
+          const data = await response.json();
+          console.log('✅ Response data received:', data);
+          console.log('📊 Response data type:', typeof data);
+          
+          // The Lambda returns the array directly (not wrapped in body property)
+          let parsedResults;
+          if (Array.isArray(data)) {
+            console.log('✅ Data is already an array');
+            parsedResults = data;
+          } else if (typeof data.body === 'string') {
+            console.log('🔄 Parsing body as JSON string...');
+            parsedResults = JSON.parse(data.body);
+          } else if (data.body) {
+            console.log('✅ Using data.body directly');
+            parsedResults = data.body;
+          } else {
+            console.error('❌ Unexpected response format:', data);
+            throw new Error('Unexpected API response format');
+          }
+
+          console.log('✅ Final results to display:', parsedResults);
+          setResults(parsedResults);
+        } catch (err) {
+          console.error('❌ Error:', err);
+          setError(err.message || 'Failed to analyze image');
+        } finally {
+          setLoading(false);
+        }
+      };
+      reader.readAsDataURL(image);
+    } catch (err) {
+      console.error('❌ File reading error:', err);
+      setError('Error reading file');
+      setLoading(false);
+    }
+  };
+
+  const handleClear = () => {
+    setImage(null);
+    setPreview(null);
+    setResults(null);
+    setError(null);
+  };
+
+  return (
+    <div className="detection-container">
+      <div className="detection-card">
+        <h1>Object Detection API</h1>
+        <p className="subtitle">Upload an image to detect objects and labels</p>
+
+        <div className="content-wrapper">
+          {/* Left Panel - Input and Parameters */}
+          <div className="left-panel">
+            <form onSubmit={handleSubmit} className="upload-form">
+              <div className="file-input-wrapper">
+                <input
+                  type="file"
+                  id="image-input"
+                  onChange={handleImageSelect}
+                  accept="image/*"
+                  disabled={loading}
+                />
+                <label htmlFor="image-input" className="file-label">
+                  {image ? `Selected: ${image.name}` : 'Choose an Image'}
+                </label>
+              </div>
+
+              {preview && (
+                <div className="preview-container">
+                  <img src={preview} alt="Preview" className="image-preview" />
+                </div>
+              )}
+
+              <div className="params-container">
+                <div className="param-input">
+                  <label htmlFor="max-labels">Max Labels:</label>
+                  <input
+                    type="number"
+                    id="max-labels"
+                    min="1"
+                    max="100"
+                    value={maxLabels}
+                    onChange={(e) => setMaxLabels(e.target.value)}
+                    disabled={loading}
+                  />
+                </div>
+                <div className="param-input">
+                  <label htmlFor="confidence">Confidence (%):</label>
+                  <input
+                    type="number"
+                    id="confidence"
+                    min="0"
+                    max="100"
+                    value={confidence}
+                    onChange={(e) => setConfidence(e.target.value)}
+                    disabled={loading}
+                  />
+                </div>
+              </div>
+
+              <div className="button-group">
+                <button type="submit" className="btn btn-primary" disabled={!image || loading}>
+                  {loading ? 'Analyzing...' : 'Detect Objects'}
+                </button>
+                {image && (
+                  <button type="button" className="btn btn-secondary" onClick={handleClear}>
+                    Clear
+                  </button>
+                )}
+              </div>
+            </form>
+          </div>
+
+          {/* Right Panel - Results */}
+          <div className="right-panel">
+            {error && (
+              <div className="alert alert-error">
+                <strong>Error:</strong> {error}
+              </div>
+            )}
+
+            {results && (
+              <div className="results-container">
+                <h2>Detection Results</h2>
+                {Array.isArray(results) && results.length === 0 ? (
+                  <p className="no-results">No objects detected</p>
+                ) : Array.isArray(results) ? (
+                  <div className="results-list">
+                    {results.map((result, index) => (
+                      <div key={index} className="result-item">
+                        <div className="result-label">{result.Label}</div>
+                        <div className="result-confidence">
+                          <span className="confidence-label">Confidence:</span>
+                          <div className="confidence-bar-container">
+                            <div
+                              className="confidence-bar"
+                              style={{ width: `${result.Confidence}%` }}
+                            >
+                              <span className="confidence-percentage">
+                                {result.Confidence.toFixed(2)}%
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="no-results">Invalid results format: {JSON.stringify(results)}</p>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default ObjectDetectionUI;
