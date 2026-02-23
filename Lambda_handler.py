@@ -19,7 +19,7 @@ def lambda_handler(event, context):
     # {
     #   "body": "<base64 image string>",
     #   "maxLabels": 5,
-    #   "confidence": 100
+    #   "confidence": 90
     # }
     # Note: API Gateway may wrap this in event['body'] as a string.
     logger.info("Get the Event")
@@ -77,7 +77,7 @@ def lambda_handler(event, context):
         
         # Read optional inference parameters (with safe defaults).
         max_labels = 5
-        min_confidence = 100
+        min_confidence = 90
 
         if isinstance(data, dict):
             max_labels = data.get('maxLabels', max_labels)
@@ -99,7 +99,7 @@ def lambda_handler(event, context):
         except (ValueError, TypeError):
             logger.warning(f"Invalid parameter types: maxLabels={max_labels}, confidence={min_confidence}")
             max_labels = 5
-            min_confidence = 100
+            min_confidence = 90
         
         # Enforce Rekognition-compatible ranges.
         max_labels = max(1, min(100, max_labels))

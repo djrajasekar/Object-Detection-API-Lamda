@@ -11,7 +11,7 @@ const ObjectDetectionUI = () => {
 
   // API tuning values sent to Lambda/Rekognition.
   const [maxLabels, setMaxLabels] = useState(5);
-  const [confidence, setConfidence] = useState(100);
+  const [confidence, setConfidence] = useState(90);
 
   // API Gateway endpoint for the Lambda function.
   // If this changes by environment (dev/test/prod), move to an env variable later.
@@ -205,7 +205,10 @@ const ObjectDetectionUI = () => {
 
             {results && (
               <div className="results-container">
-                <h2>Detection Results</h2>
+                <h2>
+                  Detection Results
+                  {Array.isArray(results) ? ` (${results.length})` : ''}
+                </h2>
                 {/* Empty array = valid response with no detections */}
                 {Array.isArray(results) && results.length === 0 ? (
                   <p className="no-results">No objects detected</p>
@@ -216,7 +219,9 @@ const ObjectDetectionUI = () => {
                       <div key={index} className="result-item">
                         <div className="result-label">{result.Label}</div>
                         <div className="result-confidence">
-                          <span className="confidence-label">Confidence:</span>
+                          <span className="confidence-label">
+                            Confidence ({index + 1}/{results.length}):
+                          </span>
                           <div className="confidence-bar-container">
                             <div
                               className="confidence-bar"

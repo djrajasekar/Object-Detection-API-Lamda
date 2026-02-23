@@ -71,13 +71,13 @@ The solution follows a client-to-cloud pipeline:
 {
   "body": "<base64 image string>",
   "maxLabels": 5,
-  "confidence": 100
+  "confidence": 90
 }
 ```
 
 - `body`: Required base64-encoded image data.
 - `maxLabels`: Optional, default `5`, range `1-100`.
-- `confidence`: Optional, default `100`, range `0-100`.
+- `confidence`: Optional, default `90`, range `0-100`.
 
 ### Response Body
 
