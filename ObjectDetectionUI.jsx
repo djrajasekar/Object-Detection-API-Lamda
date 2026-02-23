@@ -2,17 +2,22 @@ import React, { useState } from 'react';
 import './ObjectDetectionUI.css';
 
 const ObjectDetectionUI = () => {
+  // Core UI state: selected file, preview image, request lifecycle, and API output.
   const [image, setImage] = useState(null);
   const [preview, setPreview] = useState(null);
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState(null);
   const [error, setError] = useState(null);
+
+  // API tuning values sent to Lambda/Rekognition.
   const [maxLabels, setMaxLabels] = useState(15);
   const [confidence, setConfidence] = useState(80);
 
-  // API endpoint - replace with your actual Lambda API Gateway URL
+  // API Gateway endpoint for the Lambda function.
+  // If this changes by environment (dev/test/prod), move to an env variable later.
   const API_ENDPOINT = 'https://t01brchlhi.execute-api.us-east-1.amazonaws.com/dev/detection';
 
+  // Handles file input changes: stores the file and builds a browser preview.
   const handleImageSelect = (event) => {
     const file = event.target.files[0];
     if (file) {
@@ -20,7 +25,7 @@ const ObjectDetectionUI = () => {
       setError(null);
       setResults(null);
 
-      // Create preview
+      // Create a base64 preview for immediate user feedback.
       const reader = new FileReader();
       reader.onloadend = () => {
         setPreview(reader.result);
@@ -29,6 +34,7 @@ const ObjectDetectionUI = () => {
     }
   };
 
+  // Submits the selected image to Lambda and normalizes different response shapes.
   const handleSubmit = async (event) => {
     event.preventDefault();
 
@@ -42,7 +48,7 @@ const ObjectDetectionUI = () => {
     setResults(null);
 
     try {
-      // Read file as base64
+      // Read file as data URL, then strip the prefix to keep only raw base64.
       const reader = new FileReader();
       reader.onload = async () => {
         const base64String = reader.result.split(',')[1];
@@ -50,6 +56,7 @@ const ObjectDetectionUI = () => {
         console.log('📤 Sending request to:', API_ENDPOINT);
 
         try {
+          // Request contract expected by Lambda handler.
           const requestBody = JSON.stringify({
             body: base64String,
             maxLabels: parseInt(maxLabels),
@@ -77,7 +84,8 @@ const ObjectDetectionUI = () => {
           console.log('✅ Response data received:', data);
           console.log('📊 Response data type:', typeof data);
           
-          // The Lambda returns the array directly (not wrapped in body property)
+          // Support common Lambda/API Gateway response formats:
+          // 1) direct array, 2) JSON string in data.body, 3) object/array in data.body.
           let parsedResults;
           if (Array.isArray(data)) {
             console.log('✅ Data is already an array');
@@ -110,6 +118,7 @@ const ObjectDetectionUI = () => {
     }
   };
 
+  // Resets the current session so the user can start another detection.
   const handleClear = () => {
     setImage(null);
     setPreview(null);
@@ -124,7 +133,7 @@ const ObjectDetectionUI = () => {
         <p className="subtitle">Upload an image to detect objects and labels</p>
 
         <div className="content-wrapper">
-          {/* Left Panel - Input and Parameters */}
+          {/* Left panel: file upload + request parameters */}
           <div className="left-panel">
             <form onSubmit={handleSubmit} className="upload-form">
               <div className="file-input-wrapper">
@@ -186,7 +195,7 @@ const ObjectDetectionUI = () => {
             </form>
           </div>
 
-          {/* Right Panel - Results */}
+          {/* Right panel: API errors and detection results */}
           <div className="right-panel">
             {error && (
               <div className="alert alert-error">
@@ -197,10 +206,12 @@ const ObjectDetectionUI = () => {
             {results && (
               <div className="results-container">
                 <h2>Detection Results</h2>
+                {/* Empty array = valid response with no detections */}
                 {Array.isArray(results) && results.length === 0 ? (
                   <p className="no-results">No objects detected</p>
                 ) : Array.isArray(results) ? (
                   <div className="results-list">
+                    {/* Expected item shape: { Label: string, Confidence: number } */}
                     {results.map((result, index) => (
                       <div key={index} className="result-item">
                         <div className="result-label">{result.Label}</div>

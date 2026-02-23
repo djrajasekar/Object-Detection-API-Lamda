@@ -5,22 +5,29 @@ import base64
 from io import BytesIO
 from PIL import Image
 
-# Initialize AWS Rekognition client
+# AWS Rekognition client is created once per execution environment (reused on warm starts).
 rekognition = boto3.client('rekognition')
 
-# Set the Logger
+# Lambda logger setup for CloudWatch visibility.
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 
 def lambda_handler(event, context):
-    # Get the image from the API Gateway event
+    # Entry point for API Gateway -> Lambda integration.
+    # Expected request payload (JSON):
+    # {
+    #   "body": "<base64 image string>",
+    #   "maxLabels": 15,
+    #   "confidence": 80
+    # }
+    # Note: API Gateway may wrap this in event['body'] as a string.
     logger.info("Get the Event")
     try:
         logger.info(f"Full event keys: {event.keys() if isinstance(event, dict) else 'NOT A DICT'}")
         logger.info(f"Full event: {event}")
 
-        # Handle different event structures
+        # Validate event shape first.
         if 'body' not in event:
             logger.error(f"Event structure: {json.dumps(event, default=str)}")
             raise ValueError("No 'body' key found in event")
@@ -28,39 +35,39 @@ def lambda_handler(event, context):
         body = event['body']
         logger.info(f"Raw body type: {type(body)}, length: {len(body) if body else 0}")
         
-        # Handle empty body
+        # Reject empty payload early.
         if not body or body == '':
             logger.error("Body is empty string")
             raise ValueError("Request body is empty")
         
-        # Check if body is already a dict (API Gateway with binary mode off)
+        # Body can arrive as dict or JSON string depending on gateway/client settings.
         if isinstance(body, dict):
             logger.info("Body is already a dict")
             data = body
         else:
-            # Body is a string - parse it as JSON
+            # Parse serialized JSON body.
             try:
                 logger.info(f"Attempting to parse body as JSON...")
                 data = json.loads(body)
             except json.JSONDecodeError as e:
                 logger.error(f"JSON parsing failed: {e}")
                 logger.error(f"Body content (first 500 chars): {str(body)[:500]}")
-                # Maybe it's not JSON but raw base64?
+                # Fallback: accept raw base64 body if caller sent image data directly.
                 if body and not body.startswith('{') and len(body) > 100:
                     logger.info("Body looks like base64, using directly")
                     base64_string = body
                 else:
                     raise ValueError(f"Invalid JSON in request body: {str(e)}")
         
-        # Extract base64 image data and parameters
+        # Extract image data from normalized payload.
         if 'base64_string' not in locals():
             base64_string = data.get('body') if isinstance(data, dict) else data
         
-        # Extract optional parameters with defaults
+        # Read optional inference parameters (with safe defaults).
         max_labels = data.get('maxLabels', 15) if isinstance(data, dict) else 15
         min_confidence = data.get('confidence', 80) if isinstance(data, dict) else 80
         
-        # Validate parameters
+        # Convert to int; if malformed, fall back to defaults.
         try:
             max_labels = int(max_labels)
             min_confidence = int(min_confidence)
@@ -69,7 +76,7 @@ def lambda_handler(event, context):
             max_labels = 15
             min_confidence = 80
         
-        # Clamp values to valid ranges
+        # Enforce Rekognition-compatible ranges.
         max_labels = max(1, min(100, max_labels))
         min_confidence = max(0, min(100, min_confidence))
         
@@ -80,17 +87,17 @@ def lambda_handler(event, context):
         
         logger.info(f"Base64 string length: {len(base64_string)}")
 
-        # Decode the Image Binary
+        # Decode incoming image bytes.
         decoded_data = base64.b64decode(base64_string)
         logger.info(f"Decoded image data length: {len(decoded_data)}")
 
-        # Process the Image - reset stream position
+        # Open via Pillow for format normalization before sending to Rekognition.
         image_stream = BytesIO(decoded_data)
         image_stream.seek(0)
         image = Image.open(image_stream)
         logger.info(f"Image opened successfully: {image.format} {image.size} {image.mode}")
 
-        # Convert RGBA to RGB (JPEG doesn't support transparency)
+        # Convert transparency modes to RGB because output is re-encoded as JPEG.
         if image.mode in ('RGBA', 'LA', 'P'):
             rgb_image = Image.new('RGB', image.size, (255, 255, 255))
             rgb_image.paste(image, mask=image.split()[-1] if image.mode in ('RGBA', 'LA') else None)
@@ -100,7 +107,7 @@ def lambda_handler(event, context):
         image.save(stream, format="JPEG")
         image_binary = stream.getvalue()
 
-        # Perform object detection
+        # Call Rekognition DetectLabels API.
         logger.info("Detecting the Labels....")
 
         response = rekognition.detect_labels(
@@ -111,7 +118,7 @@ def lambda_handler(event, context):
             MinConfidence=min_confidence
         )
 
-        # Extract only labels and confidence
+        # Keep response lean for the frontend: only label name + confidence.
         labels_info = [
             {
                 'Label': label_info['Name'],
@@ -120,6 +127,7 @@ def lambda_handler(event, context):
             for label_info in response['Labels']
         ]
 
+        # Success response is API Gateway proxy format with CORS headers.
         return {
             'statusCode': 200,
             'headers': {
@@ -130,6 +138,7 @@ def lambda_handler(event, context):
             'body': json.dumps(labels_info)
         }
     except Exception as e:
+        # Fail safely with details in logs and a generic API error payload.
         logger.error(f"Error: {str(e)}", exc_info=True)
         return {
             'statusCode': 500,
