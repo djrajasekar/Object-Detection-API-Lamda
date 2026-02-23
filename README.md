@@ -1,77 +1,114 @@
-# Object Detection Project
+# 🧠 Object Detection API Lambda
 
-This project is an end-to-end Object Detection solution that combines:
+End-to-end object detection application using a React + Vite frontend and an AWS Lambda backend powered by Amazon Rekognition.
 
-- A React + Vite frontend for uploading images and viewing label detection results.
-- An AWS Lambda backend that uses Amazon Rekognition to detect objects in images.
+## 📚 Table of Contents
 
-The project association is:
+- [Overview](#overview)
+- [Architecture](#architecture)
+- [Tech Stack](#tech-stack)
+- [Project Structure](#project-structure)
+- [How It Works](#how-it-works)
+- [API Contract](#api-contract)
+- [Local Setup (Frontend)](#local-setup-frontend)
+- [Deployment Notes](#deployment-notes)
+- [Contributor Notes](#contributor-notes)
+- [Author](#author)
 
-- Frontend UI: image upload, confidence/max-label inputs, result rendering.
-- Backend API: receives base64 image data, runs Rekognition DetectLabels, returns label + confidence.
+## 🔍 Overview
 
-## Project Components
+This project provides:
 
-- ObjectDetectionUI.jsx: Main user interface for file upload, API request, and result display.
-- ObjectDetectionUI.css: Styles for the object detection interface.
-- Lambda_handler.py: AWS Lambda handler for image decoding, parameter validation, and Rekognition calls.
+- Frontend UI to upload an image and choose detection settings.
+- Backend API to process image payloads and return detected object labels.
+- Confidence-based results display for each detected label.
 
-## Project Architecture
+## 🏗️ Architecture
 
-This solution follows a simple client-to-cloud request pipeline:
+The solution follows a client-to-cloud pipeline:
 
-- Presentation Layer (Frontend): React + Vite UI for upload, parameter input, and result rendering.
-- API Layer: Amazon API Gateway endpoint that receives HTTPS requests from the browser.
-- Compute Layer: AWS Lambda function that validates payload, decodes image, and calls Rekognition.
-- AI Service Layer: Amazon Rekognition DetectLabels for object detection.
+1. **Frontend (React + Vite)** accepts image upload and input parameters.
+2. **Amazon API Gateway** receives HTTPS requests from the frontend.
+3. **AWS Lambda** validates input, decodes base64 image data, and invokes Rekognition.
+4. **Amazon Rekognition** runs `DetectLabels` and returns object labels with confidence scores.
 
 ![Object Detection Architecture](Object%20Detection%20Arch.png)
 
-### Data Contract Between Frontend and Backend
+## 🛠️ Tech Stack
 
-- Request body fields: `body` (base64 image), `maxLabels` (1-100), `confidence` (0-100).
-- Response body: JSON array of objects with `Label` and `Confidence`.
+- React
+- Vite
+- AWS Lambda (Python)
+- Amazon API Gateway
+- Amazon Rekognition
 
-### Deployment Association
+## 📁 Project Structure
 
-- Frontend app runs locally with Vite during development.
-- Backend Lambda is deployed in AWS and exposed through API Gateway.
-- The frontend `API_ENDPOINT` in ObjectDetectionUI.jsx must point to the active API Gateway stage URL.
+```text
+.
+├── Lambda_handler.py           # Lambda function for validation + Rekognition call
+├── ObjectDetectionUI.jsx       # Main object detection UI logic
+├── ObjectDetectionUI.css       # Styles for object detection UI
+├── src/                        # Vite app source
+├── public/                     # Static assets
+└── README.md
+```
 
-## Request/Response Flow
+## ⚙️ How It Works
 
 1. User selects an image in the frontend.
-2. Frontend converts the image to base64 and posts JSON to API Gateway.
-3. Lambda receives the request body, decodes the image, and calls Rekognition.
-4. Lambda returns detected labels and confidence values.
-5. Frontend displays the detections with confidence bars.
+2. Frontend converts image data to base64.
+3. Frontend posts payload to API Gateway.
+4. Lambda decodes payload and calls Rekognition.
+5. Lambda returns labels and confidence values.
+6. Frontend renders labels and confidence bars.
 
-## API Payload Contract
+## 🔌 API Contract
 
-Expected request payload sent from frontend:
+### Request Body
 
+```json
 {
-	"body": "<base64 image string>",
-	"maxLabels": 15,
-	"confidence": 80
+  "body": "<base64 image string>",
+  "maxLabels": 15,
+  "confidence": 80
 }
+```
 
-Typical successful response body:
+- `body`: Required base64-encoded image data.
+- `maxLabels`: Optional, range `1-100`.
+- `confidence`: Optional, range `0-100`.
 
+### Response Body
+
+```json
 [
-	{
-		"Label": "Person",
-		"Confidence": 99.23
-	}
+  {
+    "Label": "Person",
+    "Confidence": 99.23
+  }
 ]
+```
 
-## Run Frontend Locally
+## 💻 Local Setup (Frontend)
 
-- Install dependencies: npm install
-- Start dev server: npm run dev
+```bash
+npm install
+npm run dev
+```
 
-## Notes for New Team Members
+## 🚀 Deployment Notes
 
-- Update the API endpoint in ObjectDetectionUI.jsx if your API Gateway URL differs by environment.
-- Lambda expects base64 image content and supports optional maxLabels and confidence values.
-- CORS headers are returned by Lambda so the frontend can call the API from browser clients.
+- Backend Lambda must be deployed and connected to API Gateway.
+- Frontend `API_ENDPOINT` in `ObjectDetectionUI.jsx` must point to your active API Gateway stage URL.
+- Lambda should return CORS headers to allow browser-based calls from the frontend.
+
+## 🤝 Contributor Notes
+
+- Keep request/response field names aligned between frontend and Lambda handler.
+- Validate `maxLabels` and `confidence` in both UI and backend for safer input handling.
+- If API Gateway URL changes by environment, update frontend configuration accordingly.
+
+## ✍️ Author
+
+- DJ Rajasekar
