@@ -7,6 +7,7 @@ const ObjectDetectionUI = () => {
   const [preview, setPreview] = useState(null);
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState(null);
+  const [personDetection, setPersonDetection] = useState(null);
   const [error, setError] = useState(null);
 
   // API tuning values sent to Lambda/Rekognition.
@@ -24,6 +25,7 @@ const ObjectDetectionUI = () => {
       setImage(file);
       setError(null);
       setResults(null);
+      setPersonDetection(null);
 
       // Create a base64 preview for immediate user feedback.
       const reader = new FileReader();
@@ -46,6 +48,7 @@ const ObjectDetectionUI = () => {
     setLoading(true);
     setError(null);
     setResults(null);
+    setPersonDetection(null);
 
     try {
       // Read file as data URL, then strip the prefix to keep only raw base64.
@@ -87,15 +90,75 @@ const ObjectDetectionUI = () => {
           // Support common Lambda/API Gateway response formats:
           // 1) direct array, 2) JSON string in data.body, 3) object/array in data.body.
           let parsedResults;
+          let parsedPersonDetection = null;
           if (Array.isArray(data)) {
             console.log('✅ Data is already an array');
             parsedResults = data;
+            const personLabel = data.find(
+              (item) => item?.Label && item.Label.toLowerCase() === 'person'
+            );
+            const inferredPersonCount = Array.isArray(personLabel?.Instances)
+              ? personLabel.Instances.length
+              : null;
+            parsedPersonDetection = {
+              personPresent: !!personLabel,
+              personConfidence: personLabel ? personLabel.Confidence : null,
+              personCount: inferredPersonCount,
+            };
           } else if (typeof data.body === 'string') {
             console.log('🔄 Parsing body as JSON string...');
-            parsedResults = JSON.parse(data.body);
+            const parsedBody = JSON.parse(data.body);
+            if (Array.isArray(parsedBody)) {
+              parsedResults = parsedBody;
+              const personLabel = parsedBody.find(
+                (item) => item?.Label && item.Label.toLowerCase() === 'person'
+              );
+              const inferredPersonCount = Array.isArray(personLabel?.Instances)
+                ? personLabel.Instances.length
+                : null;
+              parsedPersonDetection = {
+                personPresent: !!personLabel,
+                personConfidence: personLabel ? personLabel.Confidence : null,
+                personCount: inferredPersonCount,
+              };
+            } else {
+              parsedResults = Array.isArray(parsedBody.labels) ? parsedBody.labels : [];
+              parsedPersonDetection = {
+                personPresent: !!parsedBody.personPresent,
+                personConfidence: parsedBody.personConfidence ?? null,
+                personCount: parsedBody.personCount ?? 0,
+              };
+            }
           } else if (data.body) {
             console.log('✅ Using data.body directly');
-            parsedResults = data.body;
+            if (Array.isArray(data.body)) {
+              parsedResults = data.body;
+              const personLabel = data.body.find(
+                (item) => item?.Label && item.Label.toLowerCase() === 'person'
+              );
+              const inferredPersonCount = Array.isArray(personLabel?.Instances)
+                ? personLabel.Instances.length
+                : null;
+              parsedPersonDetection = {
+                personPresent: !!personLabel,
+                personConfidence: personLabel ? personLabel.Confidence : null,
+                personCount: inferredPersonCount,
+              };
+            } else {
+              parsedResults = Array.isArray(data.body.labels) ? data.body.labels : [];
+              parsedPersonDetection = {
+                personPresent: !!data.body.personPresent,
+                personConfidence: data.body.personConfidence ?? null,
+                personCount: data.body.personCount ?? 0,
+              };
+            }
+          } else if (Array.isArray(data.labels)) {
+            parsedResults = data.labels;
+            parsedPersonDetection = {
+              personPresent: !!data.personPresent,
+              personConfidence: data.personConfidence ?? null,
+              personCount: data.personCount ?? 0,
+            };
           } else {
             console.error('❌ Unexpected response format:', data);
             throw new Error('Unexpected API response format');
@@ -103,6 +166,7 @@ const ObjectDetectionUI = () => {
 
           console.log('✅ Final results to display:', parsedResults);
           setResults(parsedResults);
+          setPersonDetection(parsedPersonDetection);
         } catch (err) {
           console.error('❌ Error:', err);
           setError(err.message || 'Failed to analyze image');
@@ -123,6 +187,7 @@ const ObjectDetectionUI = () => {
     setImage(null);
     setPreview(null);
     setResults(null);
+    setPersonDetection(null);
     setError(null);
   };
 
@@ -209,6 +274,18 @@ const ObjectDetectionUI = () => {
                   Detection Results
                   {Array.isArray(results) ? ` (${results.length})` : ''}
                 </h2>
+                {personDetection && (
+                  <div className={`person-status ${personDetection.personPresent ? 'person-yes' : 'person-no'}`}>
+                    <strong>Person detected:</strong> {personDetection.personPresent ? 'Yes' : 'No'}
+                    {personDetection.personPresent && personDetection.personConfidence != null && (
+                      <span>
+                        {' '}
+                        (Confidence: {personDetection.personConfidence.toFixed(2)}%
+                        {personDetection.personCount != null ? `, Count: ${personDetection.personCount}` : ''})
+                      </span>
+                    )}
+                  </div>
+                )}
                 {/* Empty array = valid response with no detections */}
                 {Array.isArray(results) && results.length === 0 ? (
                   <p className="no-results">No objects detected</p>
