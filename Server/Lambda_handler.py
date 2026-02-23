@@ -152,6 +152,22 @@ def lambda_handler(event, context):
             for label_info in response['Labels']
         ]
 
+        # Build explicit person-detection metadata for frontend use.
+        person_label = next(
+            (label for label in response['Labels'] if label.get('Name', '').lower() == 'person'),
+            None
+        )
+        person_present = person_label is not None
+        person_confidence = person_label.get('Confidence') if person_present else None
+        person_count = len(person_label.get('Instances', [])) if person_present else 0
+
+        result_payload = {
+            'labels': labels_info,
+            'personPresent': person_present,
+            'personConfidence': person_confidence,
+            'personCount': person_count
+        }
+
         # Success response is API Gateway proxy format with CORS headers.
         return {
             'statusCode': 200,
@@ -160,7 +176,7 @@ def lambda_handler(event, context):
                 'Access-Control-Allow-Headers': 'Content-Type',
                 'Content-Type': 'application/json'
             },
-            'body': json.dumps(labels_info)
+            'body': json.dumps(result_payload)
         }
     except Exception as e:
         # Fail safely with details in logs and a generic API error payload.

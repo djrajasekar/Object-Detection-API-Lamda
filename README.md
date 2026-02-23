@@ -82,12 +82,17 @@ The solution follows a client-to-cloud pipeline:
 ### Response Body
 
 ```json
-[
-  {
-    "Label": "Person",
-    "Confidence": 99.23
-  }
-]
+{
+  "labels": [
+    {
+      "Label": "Person",
+      "Confidence": 99.23
+    }
+  ],
+  "personPresent": true,
+  "personConfidence": 99.23,
+  "personCount": 1
+}
 ```
 
 ## 💻 Local Setup (Frontend)
