@@ -10,8 +10,8 @@ const ObjectDetectionUI = () => {
   const [error, setError] = useState(null);
 
   // API tuning values sent to Lambda/Rekognition.
-  const [maxLabels, setMaxLabels] = useState(15);
-  const [confidence, setConfidence] = useState(80);
+  const [maxLabels, setMaxLabels] = useState(5);
+  const [confidence, setConfidence] = useState(100);
 
   // API Gateway endpoint for the Lambda function.
   // If this changes by environment (dev/test/prod), move to an env variable later.
