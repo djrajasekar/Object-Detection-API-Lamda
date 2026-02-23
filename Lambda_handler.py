@@ -18,14 +18,17 @@ def lambda_handler(event, context):
     # Expected request payload (JSON):
     # {
     #   "body": "<base64 image string>",
-    #   "maxLabels": 15,
-    #   "confidence": 80
+    #   "maxLabels": 5,
+    #   "confidence": 100
     # }
     # Note: API Gateway may wrap this in event['body'] as a string.
     logger.info("Get the Event")
     try:
         logger.info(f"Full event keys: {event.keys() if isinstance(event, dict) else 'NOT A DICT'}")
         logger.info(f"Full event: {event}")
+
+        data = {}
+        base64_string = None
 
         # Validate event shape first.
         if 'body' not in event:
@@ -60,12 +63,34 @@ def lambda_handler(event, context):
                     raise ValueError(f"Invalid JSON in request body: {str(e)}")
         
         # Extract image data from normalized payload.
-        if 'base64_string' not in locals():
-            base64_string = data.get('body') if isinstance(data, dict) else data
+        if base64_string is None:
+            if isinstance(data, dict):
+                base64_string = data.get('body')
+            elif isinstance(data, str):
+                base64_string = data
+
+        # Support additional common event shapes where parameters/body are top-level.
+        if base64_string is None and isinstance(event, dict):
+            candidate_body = event.get('image') or event.get('base64') or event.get('base64Image')
+            if isinstance(candidate_body, str) and candidate_body:
+                base64_string = candidate_body
         
         # Read optional inference parameters (with safe defaults).
-        max_labels = data.get('maxLabels', 15) if isinstance(data, dict) else 15
-        min_confidence = data.get('confidence', 80) if isinstance(data, dict) else 80
+        max_labels = 5
+        min_confidence = 100
+
+        if isinstance(data, dict):
+            max_labels = data.get('maxLabels', max_labels)
+            min_confidence = data.get('confidence', min_confidence)
+
+        if isinstance(event, dict):
+            max_labels = event.get('maxLabels', max_labels)
+            min_confidence = event.get('confidence', min_confidence)
+
+            query_params = event.get('queryStringParameters') or {}
+            if isinstance(query_params, dict):
+                max_labels = query_params.get('maxLabels', max_labels)
+                min_confidence = query_params.get('confidence', min_confidence)
         
         # Convert to int; if malformed, fall back to defaults.
         try:
@@ -73,8 +98,8 @@ def lambda_handler(event, context):
             min_confidence = int(min_confidence)
         except (ValueError, TypeError):
             logger.warning(f"Invalid parameter types: maxLabels={max_labels}, confidence={min_confidence}")
-            max_labels = 15
-            min_confidence = 80
+            max_labels = 5
+            min_confidence = 100
         
         # Enforce Rekognition-compatible ranges.
         max_labels = max(1, min(100, max_labels))

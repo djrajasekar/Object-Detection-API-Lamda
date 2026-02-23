@@ -70,14 +70,14 @@ The solution follows a client-to-cloud pipeline:
 ```json
 {
   "body": "<base64 image string>",
-  "maxLabels": 15,
-  "confidence": 80
+  "maxLabels": 5,
+  "confidence": 100
 }
 ```
 
 - `body`: Required base64-encoded image data.
-- `maxLabels`: Optional, range `1-100`.
-- `confidence`: Optional, range `0-100`.
+- `maxLabels`: Optional, default `5`, range `1-100`.
+- `confidence`: Optional, default `100`, range `0-100`.
 
 ### Response Body
 
