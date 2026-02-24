@@ -4,16 +4,16 @@ End-to-end object detection application using a React + Vite frontend and an AWS
 
 ## 📚 Table of Contents
 
-- [Overview](#overview)
-- [Architecture](#architecture)
-- [Tech Stack](#tech-stack)
-- [Project Structure](#project-structure)
-- [How It Works](#how-it-works)
-- [API Contract](#api-contract)
-- [Local Setup (Frontend)](#local-setup-frontend)
-- [Deployment Notes](#deployment-notes)
-- [Contributor Notes](#contributor-notes)
-- [Author](#author)
+- [Overview](#-overview)
+- [Architecture](#-architecture)
+- [Tech Stack](#-tech-stack)
+- [Project Structure](#-project-structure)
+- [How It Works](#-how-it-works)
+- [API Contract](#-api-contract)
+- [Local Setup (Frontend)](#-local-setup-frontend)
+- [Deployment Notes](#-deployment-notes)
+- [Contributor Notes](#-contributor-notes)
+- [Author](#-author)
 
 ## 🔍 Overview
 
