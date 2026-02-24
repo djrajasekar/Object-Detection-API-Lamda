@@ -8,11 +8,13 @@ const ObjectDetectionUI = () => {
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState(null);
   const [personDetection, setPersonDetection] = useState(null);
+  const [regeneratedImage, setRegeneratedImage] = useState(null);
   const [error, setError] = useState(null);
 
   // API tuning values sent to Lambda/Rekognition.
   const [maxLabels, setMaxLabels] = useState(5);
   const [confidence, setConfidence] = useState(90);
+  const [removePeople, setRemovePeople] = useState(false);
 
   // API Gateway endpoint for the Lambda function.
   // If this changes by environment (dev/test/prod), move to an env variable later.
@@ -26,6 +28,7 @@ const ObjectDetectionUI = () => {
       setError(null);
       setResults(null);
       setPersonDetection(null);
+      setRegeneratedImage(null);
 
       // Create a base64 preview for immediate user feedback.
       const reader = new FileReader();
@@ -49,6 +52,7 @@ const ObjectDetectionUI = () => {
     setError(null);
     setResults(null);
     setPersonDetection(null);
+    setRegeneratedImage(null);
 
     try {
       // Read file as data URL, then strip the prefix to keep only raw base64.
@@ -64,6 +68,7 @@ const ObjectDetectionUI = () => {
             body: base64String,
             maxLabels: parseInt(maxLabels),
             confidence: parseInt(confidence),
+            removePeople,
           });
           console.log('📦 Request body size:', requestBody.length, 'bytes');
 
@@ -91,6 +96,7 @@ const ObjectDetectionUI = () => {
           // 1) direct array, 2) JSON string in data.body, 3) object/array in data.body.
           let parsedResults;
           let parsedPersonDetection = null;
+          let parsedRegeneratedImage = null;
           if (Array.isArray(data)) {
             console.log('✅ Data is already an array');
             parsedResults = data;
@@ -128,6 +134,7 @@ const ObjectDetectionUI = () => {
                 personConfidence: parsedBody.personConfidence ?? null,
                 personCount: parsedBody.personCount ?? 0,
               };
+              parsedRegeneratedImage = parsedBody.regeneratedImageBase64 ?? null;
             }
           } else if (data.body) {
             console.log('✅ Using data.body directly');
@@ -151,6 +158,7 @@ const ObjectDetectionUI = () => {
                 personConfidence: data.body.personConfidence ?? null,
                 personCount: data.body.personCount ?? 0,
               };
+              parsedRegeneratedImage = data.body.regeneratedImageBase64 ?? null;
             }
           } else if (Array.isArray(data.labels)) {
             parsedResults = data.labels;
@@ -159,6 +167,7 @@ const ObjectDetectionUI = () => {
               personConfidence: data.personConfidence ?? null,
               personCount: data.personCount ?? 0,
             };
+            parsedRegeneratedImage = data.regeneratedImageBase64 ?? null;
           } else {
             console.error('❌ Unexpected response format:', data);
             throw new Error('Unexpected API response format');
@@ -167,6 +176,7 @@ const ObjectDetectionUI = () => {
           console.log('✅ Final results to display:', parsedResults);
           setResults(parsedResults);
           setPersonDetection(parsedPersonDetection);
+          setRegeneratedImage(parsedRegeneratedImage);
         } catch (err) {
           console.error('❌ Error:', err);
           setError(err.message || 'Failed to analyze image');
@@ -188,6 +198,7 @@ const ObjectDetectionUI = () => {
     setPreview(null);
     setResults(null);
     setPersonDetection(null);
+    setRegeneratedImage(null);
     setError(null);
   };
 
@@ -247,9 +258,28 @@ const ObjectDetectionUI = () => {
                 </div>
               </div>
 
+              <div className="toggle-container">
+                <label htmlFor="remove-people" className="checkbox-label">
+                  <input
+                    type="checkbox"
+                    id="remove-people"
+                    checked={removePeople}
+                    onChange={(e) => setRemovePeople(e.target.checked)}
+                    disabled={loading}
+                  />
+                  Remove people and regenerate image
+                </label>
+              </div>
+
               <div className="button-group">
                 <button type="submit" className="btn btn-primary" disabled={!image || loading}>
-                  {loading ? 'Analyzing...' : 'Detect Objects'}
+                  {loading
+                    ? removePeople
+                      ? 'Analyzing & Regenerating...'
+                      : 'Analyzing...'
+                    : removePeople
+                      ? 'Detect & Remove People'
+                      : 'Detect Objects'}
                 </button>
                 {image && (
                   <button type="button" className="btn btn-secondary" onClick={handleClear}>
@@ -315,6 +345,21 @@ const ObjectDetectionUI = () => {
                   </div>
                 ) : (
                   <p className="no-results">Invalid results format: {JSON.stringify(results)}</p>
+                )}
+
+                {removePeople && personDetection && !personDetection.personPresent && (
+                  <p className="regen-note">No people were detected, so no regenerated image was created.</p>
+                )}
+
+                {removePeople && regeneratedImage && (
+                  <div className="regenerated-container">
+                    <h3>Regenerated Image (People Removed)</h3>
+                    <img
+                      src={`data:image/jpeg;base64,${regeneratedImage}`}
+                      alt="Regenerated without people"
+                      className="image-preview regenerated-preview"
+                    />
+                  </div>
                 )}
               </div>
             )}

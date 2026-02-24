@@ -13,13 +13,61 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 
+def _remove_people_from_image(source_image, person_instances):
+    # Approximate person removal by replacing each detected person region
+    # with stretched nearby background strips.
+    working_image = source_image.copy()
+    width, height = working_image.size
+
+    for instance in person_instances:
+        bbox = instance.get('BoundingBox') or {}
+        left = int((bbox.get('Left', 0) or 0) * width)
+        top = int((bbox.get('Top', 0) or 0) * height)
+        box_width = int((bbox.get('Width', 0) or 0) * width)
+        box_height = int((bbox.get('Height', 0) or 0) * height)
+
+        if box_width <= 0 or box_height <= 0:
+            continue
+
+        right = min(width, left + box_width)
+        bottom = min(height, top + box_height)
+        left = max(0, left)
+        top = max(0, top)
+
+        if right <= left or bottom <= top:
+            continue
+
+        strip_height = max(2, min((bottom - top) // 4, 24))
+        strip_width = max(2, min((right - left) // 4, 24))
+
+        replacement_patch = None
+
+        if top - strip_height >= 0:
+            replacement_patch = working_image.crop((left, top - strip_height, right, top))
+        elif bottom + strip_height <= height:
+            replacement_patch = working_image.crop((left, bottom, right, bottom + strip_height))
+        elif left - strip_width >= 0:
+            replacement_patch = working_image.crop((left - strip_width, top, left, bottom))
+        elif right + strip_width <= width:
+            replacement_patch = working_image.crop((right, top, right + strip_width, bottom))
+
+        if replacement_patch is None or replacement_patch.size[0] == 0 or replacement_patch.size[1] == 0:
+            continue
+
+        replacement_patch = replacement_patch.resize((right - left, bottom - top), Image.Resampling.BILINEAR)
+        working_image.paste(replacement_patch, (left, top, right, bottom))
+
+    return working_image
+
+
 def lambda_handler(event, context):
     # Entry point for API Gateway -> Lambda integration.
     # Expected request payload (JSON):
     # {
     #   "body": "<base64 image string>",
     #   "maxLabels": 5,
-    #   "confidence": 90
+    #   "confidence": 90,
+    #   "removePeople": false
     # }
     # Note: API Gateway may wrap this in event['body'] as a string.
     logger.info("Get the Event")
@@ -78,19 +126,23 @@ def lambda_handler(event, context):
         # Read optional inference parameters (with safe defaults).
         max_labels = 5
         min_confidence = 90
+        remove_people = False
 
         if isinstance(data, dict):
             max_labels = data.get('maxLabels', max_labels)
             min_confidence = data.get('confidence', min_confidence)
+            remove_people = data.get('removePeople', remove_people)
 
         if isinstance(event, dict):
             max_labels = event.get('maxLabels', max_labels)
             min_confidence = event.get('confidence', min_confidence)
+            remove_people = event.get('removePeople', remove_people)
 
             query_params = event.get('queryStringParameters') or {}
             if isinstance(query_params, dict):
                 max_labels = query_params.get('maxLabels', max_labels)
                 min_confidence = query_params.get('confidence', min_confidence)
+                remove_people = query_params.get('removePeople', remove_people)
         
         # Convert to int; if malformed, fall back to defaults.
         try:
@@ -100,12 +152,19 @@ def lambda_handler(event, context):
             logger.warning(f"Invalid parameter types: maxLabels={max_labels}, confidence={min_confidence}")
             max_labels = 5
             min_confidence = 90
+
+        if isinstance(remove_people, str):
+            remove_people = remove_people.strip().lower() in ('true', '1', 'yes', 'y', 'on')
+        else:
+            remove_people = bool(remove_people)
         
         # Enforce Rekognition-compatible ranges.
         max_labels = max(1, min(100, max_labels))
         min_confidence = max(0, min(100, min_confidence))
         
-        logger.info(f"Detection parameters: MaxLabels={max_labels}, MinConfidence={min_confidence}")
+        logger.info(
+            f"Detection parameters: MaxLabels={max_labels}, MinConfidence={min_confidence}, RemovePeople={remove_people}"
+        )
         
         if not base64_string:
             raise ValueError("No base64 image data found in request body")
@@ -161,11 +220,23 @@ def lambda_handler(event, context):
         person_confidence = person_label.get('Confidence') if person_present else None
         person_count = len(person_label.get('Instances', [])) if person_present else 0
 
+        regenerated_image_base64 = None
+        if remove_people and person_present:
+            person_instances = person_label.get('Instances', [])
+            regenerated_image = _remove_people_from_image(image, person_instances)
+            regenerated_stream = BytesIO()
+            regenerated_image.save(regenerated_stream, format="JPEG")
+            regenerated_stream.seek(0)
+            regenerated_image_base64 = base64.b64encode(regenerated_stream.read()).decode('utf-8')
+
         result_payload = {
             'labels': labels_info,
             'personPresent': person_present,
             'personConfidence': person_confidence,
-            'personCount': person_count
+            'personCount': person_count,
+            'removePeopleRequested': remove_people,
+            'peopleRemoved': bool(remove_people and person_present),
+            'regeneratedImageBase64': regenerated_image_base64
         }
 
         # Success response is API Gateway proxy format with CORS headers.

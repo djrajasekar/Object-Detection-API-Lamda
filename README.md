@@ -71,13 +71,15 @@ The solution follows a client-to-cloud pipeline:
 {
   "body": "<base64 image string>",
   "maxLabels": 5,
-  "confidence": 90
+  "confidence": 90,
+  "removePeople": false
 }
 ```
 
 - `body`: Required base64-encoded image data.
 - `maxLabels`: Optional, default `5`, range `1-100`.
 - `confidence`: Optional, default `90`, range `0-100`.
+- `removePeople`: Optional, default `false`. When `true`, backend attempts to regenerate an image with detected people removed.
 
 ### Response Body
 
@@ -91,7 +93,10 @@ The solution follows a client-to-cloud pipeline:
   ],
   "personPresent": true,
   "personConfidence": 99.23,
-  "personCount": 1
+  "personCount": 1,
+  "removePeopleRequested": true,
+  "peopleRemoved": true,
+  "regeneratedImageBase64": "<base64 jpeg or null>"
 }
 ```
 
