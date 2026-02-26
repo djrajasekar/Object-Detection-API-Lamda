@@ -194,7 +194,7 @@ const ObjectDetectionUI = () => {
   return (
     <div className="detection-container">
       <div className="detection-card">
-        <h1>Object Detection API</h1>
+        <h1>Object Detection</h1>
         <p className="subtitle">Upload an image to detect objects and labels</p>
 
         <div className="content-wrapper">
