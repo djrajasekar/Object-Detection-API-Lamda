@@ -107,10 +107,16 @@ npm install
 npm run dev
 ```
 
+Create `.env.local` from `.env.example` and set your API URL:
+
+```powershell
+Copy-Item .env.example .env.local
+```
+
 ## 🚀 Deployment Notes
 
 - Backend Lambda must be deployed and connected to API Gateway.
-- Frontend `API_ENDPOINT` in `ObjectDetectionUI.jsx` must point to your active API Gateway stage URL.
+- Frontend uses `VITE_API_ENDPOINT` from `.env.local` for the API Gateway stage URL.
 - Lambda should return CORS headers to allow browser-based calls from the frontend.
 
 ## 🤝 Contributor Notes

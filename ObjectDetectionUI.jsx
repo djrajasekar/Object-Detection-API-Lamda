@@ -7,7 +7,10 @@ const ObjectDetectionUI = () => {
   const [preview, setPreview] = useState(null);
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState(null);
+  // Person-focused metadata derived from API response.
+  // Example shape: { personPresent: true, personConfidence: 99.2, personCount: 1 }
   const [personDetection, setPersonDetection] = useState(null);
+  // Base64 payload of regenerated image returned by backend when removePeople is enabled.
   const [regeneratedImage, setRegeneratedImage] = useState(null);
   const [error, setError] = useState(null);
 
@@ -17,8 +20,7 @@ const ObjectDetectionUI = () => {
   const [removePeople, setRemovePeople] = useState(false);
 
   // API Gateway endpoint for the Lambda function.
-  // If this changes by environment (dev/test/prod), move to an env variable later.
-  const API_ENDPOINT = 'https://t01brchlhi.execute-api.us-east-1.amazonaws.com/dev/detection';
+  const API_ENDPOINT = import.meta.env.VITE_API_ENDPOINT;
 
   // Handles file input changes: stores the file and builds a browser preview.
   const handleImageSelect = (event) => {
@@ -45,6 +47,11 @@ const ObjectDetectionUI = () => {
 
     if (!image) {
       setError('Please select an image');
+      return;
+    }
+
+    if (!API_ENDPOINT) {
+      setError('Missing API endpoint configuration. Set VITE_API_ENDPOINT in .env.local');
       return;
     }
 
@@ -95,7 +102,10 @@ const ObjectDetectionUI = () => {
           // Support common Lambda/API Gateway response formats:
           // 1) direct array, 2) JSON string in data.body, 3) object/array in data.body.
           let parsedResults;
+          // Normalized person metadata so UI rendering is consistent
+          // even when backend response shape varies.
           let parsedPersonDetection = null;
+          // Optional regenerated image payload (base64 JPEG) from backend.
           let parsedRegeneratedImage = null;
           if (Array.isArray(data)) {
             console.log('✅ Data is already an array');
@@ -128,6 +138,8 @@ const ObjectDetectionUI = () => {
                 personCount: inferredPersonCount,
               };
             } else {
+              // Preferred response shape from Lambda handler:
+              // { labels, personPresent, personConfidence, personCount, regeneratedImageBase64 }
               parsedResults = Array.isArray(parsedBody.labels) ? parsedBody.labels : [];
               parsedPersonDetection = {
                 personPresent: !!parsedBody.personPresent,
@@ -152,6 +164,7 @@ const ObjectDetectionUI = () => {
                 personCount: inferredPersonCount,
               };
             } else {
+              // API Gateway may return a parsed object in body directly.
               parsedResults = Array.isArray(data.body.labels) ? data.body.labels : [];
               parsedPersonDetection = {
                 personPresent: !!data.body.personPresent,
@@ -304,9 +317,11 @@ const ObjectDetectionUI = () => {
                   Detection Results
                   {Array.isArray(results) ? ` (${results.length})` : ''}
                 </h2>
+                {/* Person details panel is rendered only after a successful response parse. */}
                 {personDetection && (
                   <div className={`person-status ${personDetection.personPresent ? 'person-yes' : 'person-no'}`}>
                     <strong>Person detected:</strong> {personDetection.personPresent ? 'Yes' : 'No'}
+                    {/* Show confidence/count only when person is actually detected. */}
                     {personDetection.personPresent && personDetection.personConfidence != null && (
                       <span>
                         {' '}
@@ -347,10 +362,12 @@ const ObjectDetectionUI = () => {
                   <p className="no-results">Invalid results format: {JSON.stringify(results)}</p>
                 )}
 
+                {/* Informational message for remove mode when no person exists in image. */}
                 {removePeople && personDetection && !personDetection.personPresent && (
                   <p className="regen-note">No people were detected, so no regenerated image was created.</p>
                 )}
 
+                {/* Render regenerated image only when backend returned a valid base64 result. */}
                 {removePeople && regeneratedImage && (
                   <div className="regenerated-container">
                     <h3>Regenerated Image (People Removed)</h3>

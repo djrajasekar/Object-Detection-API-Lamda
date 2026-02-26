@@ -16,10 +16,22 @@ logger.setLevel(logging.INFO)
 def _remove_people_from_image(source_image, person_instances):
     # Approximate person removal by replacing each detected person region
     # with stretched nearby background strips.
+    #
+    # Important notes about this approach:
+    # - This is not semantic inpainting; it is a simple fill strategy.
+    # - Rekognition returns normalized bounding boxes (0..1), so we convert
+    #   each one to absolute pixel coordinates before editing the image.
+    # - For each detected person box, we sample a thin strip from the nearest
+    #   available side (top, bottom, left, then right), resize it to the full
+    #   person box size, and paste it over that box.
+    # - Result quality depends on scene complexity; textured or crowded scenes
+    #   may show visible artifacts where people were removed.
     working_image = source_image.copy()
     width, height = working_image.size
 
     for instance in person_instances:
+        # Rekognition instance format includes BoundingBox with normalized values:
+        # { Left, Top, Width, Height } in range 0..1 relative to image size.
         bbox = instance.get('BoundingBox') or {}
         left = int((bbox.get('Left', 0) or 0) * width)
         top = int((bbox.get('Top', 0) or 0) * height)
@@ -37,11 +49,21 @@ def _remove_people_from_image(source_image, person_instances):
         if right <= left or bottom <= top:
             continue
 
+        # Define sampling strip thickness:
+        # - roughly 25% of the target box dimension
+        # - clamped to avoid strips that are too tiny or too large
         strip_height = max(2, min((bottom - top) // 4, 24))
         strip_width = max(2, min((right - left) // 4, 24))
 
         replacement_patch = None
 
+        # Pick a source strip from nearby background in this preference order:
+        # 1) immediately above box
+        # 2) immediately below box
+        # 3) immediately left of box
+        # 4) immediately right of box
+        #
+        # This order generally preserves vertical scene continuity first.
         if top - strip_height >= 0:
             replacement_patch = working_image.crop((left, top - strip_height, right, top))
         elif bottom + strip_height <= height:
@@ -51,9 +73,12 @@ def _remove_people_from_image(source_image, person_instances):
         elif right + strip_width <= width:
             replacement_patch = working_image.crop((right, top, right + strip_width, bottom))
 
+        # Skip if no valid neighboring pixels are available for replacement.
         if replacement_patch is None or replacement_patch.size[0] == 0 or replacement_patch.size[1] == 0:
             continue
 
+        # Stretch sampled strip to fill entire person bounding box and paste.
+        # Bilinear interpolation keeps the transition smoother than nearest-neighbor.
         replacement_patch = replacement_patch.resize((right - left, bottom - top), Image.Resampling.BILINEAR)
         working_image.paste(replacement_patch, (left, top, right, bottom))
 
@@ -222,6 +247,8 @@ def lambda_handler(event, context):
 
         regenerated_image_base64 = None
         if remove_people and person_present:
+            # Instances contains one bounding box per detected person instance.
+            # Each box is used as a mask target for background patch replacement.
             person_instances = person_label.get('Instances', [])
             regenerated_image = _remove_people_from_image(image, person_instances)
             regenerated_stream = BytesIO()
