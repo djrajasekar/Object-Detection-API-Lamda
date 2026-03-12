@@ -1,4 +1,4 @@
-# 🧠 Object Detection API Lambda
+# 🧠 Cloud Object Detection Platform
 
 End-to-end object detection application using a React + Vite frontend and an AWS Lambda backend powered by Amazon Rekognition.
 
