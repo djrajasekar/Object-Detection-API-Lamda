@@ -71,13 +71,15 @@ The solution follows a client-to-cloud pipeline:
 {
   "body": "<base64 image string>",
   "maxLabels": 5,
-  "confidence": 90
+  "confidence": 90,
+  "removePeople": false
 }
 ```
 
 - `body`: Required base64-encoded image data.
 - `maxLabels`: Optional, default `5`, range `1-100`.
 - `confidence`: Optional, default `90`, range `0-100`.
+- `removePeople`: Optional, default `false`. When `true`, backend attempts to regenerate an image with detected people removed.
 
 ### Response Body
 
@@ -91,7 +93,10 @@ The solution follows a client-to-cloud pipeline:
   ],
   "personPresent": true,
   "personConfidence": 99.23,
-  "personCount": 1
+  "personCount": 1,
+  "removePeopleRequested": true,
+  "peopleRemoved": true,
+  "regeneratedImageBase64": "<base64 jpeg or null>"
 }
 ```
 
@@ -102,10 +107,16 @@ npm install
 npm run dev
 ```
 
+Create `.env.local` from `.env.example` and set your API URL:
+
+```powershell
+Copy-Item .env.example .env.local
+```
+
 ## 🚀 Deployment Notes
 
 - Backend Lambda must be deployed and connected to API Gateway.
-- Frontend `API_ENDPOINT` in `ObjectDetectionUI.jsx` must point to your active API Gateway stage URL.
+- Frontend uses `VITE_API_ENDPOINT` from `.env.local` for the API Gateway stage URL.
 - Lambda should return CORS headers to allow browser-based calls from the frontend.
 
 ## 🤝 Contributor Notes

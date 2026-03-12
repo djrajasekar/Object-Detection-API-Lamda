@@ -7,16 +7,20 @@ const ObjectDetectionUI = () => {
   const [preview, setPreview] = useState(null);
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState(null);
+  // Person-focused metadata derived from API response.
+  // Example shape: { personPresent: true, personConfidence: 99.2, personCount: 1 }
   const [personDetection, setPersonDetection] = useState(null);
+  // Base64 payload of regenerated image returned by backend when removePeople is enabled.
+  const [regeneratedImage, setRegeneratedImage] = useState(null);
   const [error, setError] = useState(null);
 
   // API tuning values sent to Lambda/Rekognition.
   const [maxLabels, setMaxLabels] = useState(5);
   const [confidence, setConfidence] = useState(90);
+  const [removePeople, setRemovePeople] = useState(false);
 
   // API Gateway endpoint for the Lambda function.
-  // If this changes by environment (dev/test/prod), move to an env variable later.
-  const API_ENDPOINT = 'https://t01brchlhi.execute-api.us-east-1.amazonaws.com/dev/detection';
+  const API_ENDPOINT = import.meta.env.VITE_API_ENDPOINT;
 
   // Handles file input changes: stores the file and builds a browser preview.
   const handleImageSelect = (event) => {
@@ -26,6 +30,7 @@ const ObjectDetectionUI = () => {
       setError(null);
       setResults(null);
       setPersonDetection(null);
+      setRegeneratedImage(null);
 
       // Create a base64 preview for immediate user feedback.
       const reader = new FileReader();
@@ -45,10 +50,16 @@ const ObjectDetectionUI = () => {
       return;
     }
 
+    if (!API_ENDPOINT) {
+      setError('Missing API endpoint configuration. Set VITE_API_ENDPOINT in .env.local');
+      return;
+    }
+
     setLoading(true);
     setError(null);
     setResults(null);
     setPersonDetection(null);
+    setRegeneratedImage(null);
 
     try {
       // Read file as data URL, then strip the prefix to keep only raw base64.
@@ -64,6 +75,7 @@ const ObjectDetectionUI = () => {
             body: base64String,
             maxLabels: parseInt(maxLabels),
             confidence: parseInt(confidence),
+            removePeople,
           });
           console.log('📦 Request body size:', requestBody.length, 'bytes');
 
@@ -90,7 +102,11 @@ const ObjectDetectionUI = () => {
           // Support common Lambda/API Gateway response formats:
           // 1) direct array, 2) JSON string in data.body, 3) object/array in data.body.
           let parsedResults;
+          // Normalized person metadata so UI rendering is consistent
+          // even when backend response shape varies.
           let parsedPersonDetection = null;
+          // Optional regenerated image payload (base64 JPEG) from backend.
+          let parsedRegeneratedImage = null;
           if (Array.isArray(data)) {
             console.log('✅ Data is already an array');
             parsedResults = data;
@@ -122,12 +138,15 @@ const ObjectDetectionUI = () => {
                 personCount: inferredPersonCount,
               };
             } else {
+              // Preferred response shape from Lambda handler:
+              // { labels, personPresent, personConfidence, personCount, regeneratedImageBase64 }
               parsedResults = Array.isArray(parsedBody.labels) ? parsedBody.labels : [];
               parsedPersonDetection = {
                 personPresent: !!parsedBody.personPresent,
                 personConfidence: parsedBody.personConfidence ?? null,
                 personCount: parsedBody.personCount ?? 0,
               };
+              parsedRegeneratedImage = parsedBody.regeneratedImageBase64 ?? null;
             }
           } else if (data.body) {
             console.log('✅ Using data.body directly');
@@ -145,12 +164,14 @@ const ObjectDetectionUI = () => {
                 personCount: inferredPersonCount,
               };
             } else {
+              // API Gateway may return a parsed object in body directly.
               parsedResults = Array.isArray(data.body.labels) ? data.body.labels : [];
               parsedPersonDetection = {
                 personPresent: !!data.body.personPresent,
                 personConfidence: data.body.personConfidence ?? null,
                 personCount: data.body.personCount ?? 0,
               };
+              parsedRegeneratedImage = data.body.regeneratedImageBase64 ?? null;
             }
           } else if (Array.isArray(data.labels)) {
             parsedResults = data.labels;
@@ -159,6 +180,7 @@ const ObjectDetectionUI = () => {
               personConfidence: data.personConfidence ?? null,
               personCount: data.personCount ?? 0,
             };
+            parsedRegeneratedImage = data.regeneratedImageBase64 ?? null;
           } else {
             console.error('❌ Unexpected response format:', data);
             throw new Error('Unexpected API response format');
@@ -167,6 +189,7 @@ const ObjectDetectionUI = () => {
           console.log('✅ Final results to display:', parsedResults);
           setResults(parsedResults);
           setPersonDetection(parsedPersonDetection);
+          setRegeneratedImage(parsedRegeneratedImage);
         } catch (err) {
           console.error('❌ Error:', err);
           setError(err.message || 'Failed to analyze image');
@@ -188,13 +211,14 @@ const ObjectDetectionUI = () => {
     setPreview(null);
     setResults(null);
     setPersonDetection(null);
+    setRegeneratedImage(null);
     setError(null);
   };
 
   return (
     <div className="detection-container">
       <div className="detection-card">
-        <h1>Object Detection</h1>
+        <h1>Object Detection and Masking</h1>
         <p className="subtitle">Upload an image to detect objects and labels</p>
 
         <div className="content-wrapper">
@@ -247,9 +271,28 @@ const ObjectDetectionUI = () => {
                 </div>
               </div>
 
+              <div className="toggle-container">
+                <label htmlFor="remove-people" className="checkbox-label">
+                  <input
+                    type="checkbox"
+                    id="remove-people"
+                    checked={removePeople}
+                    onChange={(e) => setRemovePeople(e.target.checked)}
+                    disabled={loading}
+                  />
+                  Remove people and regenerate image
+                </label>
+              </div>
+
               <div className="button-group">
                 <button type="submit" className="btn btn-primary" disabled={!image || loading}>
-                  {loading ? 'Analyzing...' : 'Detect Objects'}
+                  {loading
+                    ? removePeople
+                      ? 'Analyzing & Regenerating...'
+                      : 'Analyzing...'
+                    : removePeople
+                      ? 'Detect & Remove People'
+                      : 'Detect Objects'}
                 </button>
                 {image && (
                   <button type="button" className="btn btn-secondary" onClick={handleClear}>
@@ -274,9 +317,11 @@ const ObjectDetectionUI = () => {
                   Detection Results
                   {Array.isArray(results) ? ` (${results.length})` : ''}
                 </h2>
+                {/* Person details panel is rendered only after a successful response parse. */}
                 {personDetection && (
                   <div className={`person-status ${personDetection.personPresent ? 'person-yes' : 'person-no'}`}>
                     <strong>Person detected:</strong> {personDetection.personPresent ? 'Yes' : 'No'}
+                    {/* Show confidence/count only when person is actually detected. */}
                     {personDetection.personPresent && personDetection.personConfidence != null && (
                       <span>
                         {' '}
@@ -315,6 +360,23 @@ const ObjectDetectionUI = () => {
                   </div>
                 ) : (
                   <p className="no-results">Invalid results format: {JSON.stringify(results)}</p>
+                )}
+
+                {/* Informational message for remove mode when no person exists in image. */}
+                {removePeople && personDetection && !personDetection.personPresent && (
+                  <p className="regen-note">No people were detected, so no regenerated image was created.</p>
+                )}
+
+                {/* Render regenerated image only when backend returned a valid base64 result. */}
+                {removePeople && regeneratedImage && (
+                  <div className="regenerated-container">
+                    <h3>Regenerated Image (People Removed)</h3>
+                    <img
+                      src={`data:image/jpeg;base64,${regeneratedImage}`}
+                      alt="Regenerated without people"
+                      className="image-preview regenerated-preview"
+                    />
+                  </div>
                 )}
               </div>
             )}
